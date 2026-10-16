@@ -389,5 +389,7 @@
   "데이터 출처": "Data source",
   "리포트의 기록을 CSV로 저장했어요.": "The report records have been saved as CSV.",
   "투여 부위": "Injection site",
-  "분": "min"
+  "분": "min",
+  "사진 없는 기록": "Text-only record",
+  "합성 사진 · 데모": "Synthetic photo · Demo"
 }

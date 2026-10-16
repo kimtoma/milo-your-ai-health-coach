@@ -1,0 +1,90 @@
+{
+  "wave": {
+    "sprite": "/assets/milo/wave-v1.webp",
+    "poster": "/assets/milo/wave-poster-v1.webp",
+    "video": "/assets/milo/wave-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 7
+  },
+  "walk": {
+    "sprite": "/assets/milo/walk-v1.webp",
+    "poster": "/assets/milo/walk-poster-v1.webp",
+    "video": "/assets/milo/walk-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 8
+  },
+  "meal": {
+    "sprite": "/assets/milo/meal-v1.webp",
+    "poster": "/assets/milo/meal-poster-v1.webp",
+    "video": "/assets/milo/meal-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 4
+  },
+  "injection": {
+    "sprite": "/assets/milo/injection-v1.webp",
+    "poster": "/assets/milo/injection-poster-v1.webp",
+    "video": "/assets/milo/injection-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 4
+  },
+  "idle": {
+    "sprite": "/assets/milo/idle-v1.webp",
+    "poster": "/assets/milo/idle-poster-v1.webp",
+    "video": "/assets/milo/idle-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 4
+  },
+  "thinking": {
+    "sprite": "/assets/milo/thinking-v1.webp",
+    "poster": "/assets/milo/thinking-poster-v1.webp",
+    "video": "/assets/milo/thinking-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 4
+  },
+  "celebrate": {
+    "sprite": "/assets/milo/celebrate-v1.webp",
+    "poster": "/assets/milo/celebrate-poster-v1.webp",
+    "video": "/assets/milo/celebrate-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 6
+  },
+  "comfort": {
+    "sprite": "/assets/milo/comfort-v1.webp",
+    "poster": "/assets/milo/comfort-poster-v1.webp",
+    "video": "/assets/milo/comfort-v1.mp4",
+    "columns": 4,
+    "rows": 2,
+    "frames": 8,
+    "frameWidth": 384,
+    "frameHeight": 384,
+    "fps": 4
+  }
+}

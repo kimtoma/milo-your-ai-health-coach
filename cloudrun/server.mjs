@@ -165,7 +165,7 @@ const server = http.createServer(async (req, res) => {
   if (!filePath.startsWith(publicDir + path.sep)) {
     res.writeHead(404); res.end('Not found'); return;
   }
-  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
+  const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.webp':'image/webp', '.mp4':'video/mp4', '.json':'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
   const type = types[path.extname(filePath)];
   if (!type) { res.writeHead(404); res.end('Not found'); return; }
   fs.readFile(filePath, (err, content) => {

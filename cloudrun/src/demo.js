@@ -4,10 +4,24 @@ const meals=[
   ['달걀 샌드위치와 우유','Egg sandwich and milk'],
   ['두부 샐러드와 고구마','Tofu salad and sweet potato'],
   ['생선구이, 밥, 채소','Grilled fish, rice and vegetables'],
-  ['그릭 요거트와 과일','Greek yogurt and fruit']
+  ['그릭 요거트와 과일','Greek yogurt and fruit'],
+  ['현미밥, 두부국, 나물 반찬','Brown rice, tofu soup and vegetable sides']
 ];
 const activities=[['저녁 산책','Evening walk'],['가벼운 스트레칭','Gentle stretching'],['공원 걷기','Walk in the park']];
 const sites=['복부 왼쪽','복부 오른쪽','허벅지 왼쪽','허벅지 오른쪽'];
+const mealPhotos={
+  '현미밥, 닭가슴살, 나물':['chicken','닭고기와 현미밥, 브로콜리 예시 사진','Example photo of chicken, brown rice and broccoli'],
+  '두부 샐러드와 고구마':['tofu','두부와 채소 샐러드 예시 사진','Example photo of tofu and vegetable salad'],
+  '그릭 요거트와 과일':['yogurt','그릭 요거트와 과일 예시 사진','Example photo of Greek yogurt and fruit'],
+  '현미밥, 두부국, 나물 반찬':['korean','현미밥과 두부국, 채소 반찬 예시 사진','Example photo of brown rice, tofu soup and vegetable sides']
+};
+function samplePhoto(record,language){
+  if(record.kind!=='meal'||!record.demo||!/^demo-v1-\d+-meal$/.test(record.id||''))return null;
+  const day=Number(record.id.split('-')[2]);
+  if(day%5===1)return null;
+  const photo=mealPhotos[record.demoText?.foods?.ko];
+  return photo?{src:`/assets/demo-meals/${photo[0]}-v1.webp`,alt:photo[language==='en'?2:1],synthetic:true}:null;
+}
 function bilingual(ko,en){return {ko,en};}
 export function createDemoRecords(now=new Date()){
   const records=[];
@@ -33,5 +47,7 @@ export function demoRecordForLanguage(record,language='ko'){
   if(!record.demo||!record.demoText)return record;
   const result={...record};
   for(const[key,value]of Object.entries(record.demoText))result[key]=value?.[language]??value?.ko??null;
+  // Existing synthetic samples gain photos without replacing saved records or IDs.
+  const photo=samplePhoto(record,language);if(photo)result.photo=photo;
   return result;
 }

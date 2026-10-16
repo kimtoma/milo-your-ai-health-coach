@@ -15,6 +15,8 @@ import {titleFor,detailFor,visitSummary} from './presentation.js';
 import {tr,html,setLanguage,getLanguage,locale,weekdayLabel} from './i18n.js';
 import {createDemoRecords,demoRecordForLanguage} from './demo.js';
 import {buildReport} from './report.js';
+import './companion.js';
+import {conversationMoods,moodForRecord} from './milo-behavior.js';
 
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -49,6 +51,30 @@ const journalRoutes = [
 const routeTitles = {milo:'Milo',journal:'기록',overview:'오늘의 요약',progress:'변화 보기',plan:'나의 일정',visit:'진료 준비',story:'작은 성취 공유',settings:'앱 사용 방식',me:'나',health:'나의 건강',report:'리포트'};
 let snackTimer;
 let recordKind;
+let companionMood='idle';
+let companionTimer;
+function setCompanionMood(mood,duration=0) {
+  clearTimeout(companionTimer);
+  companionMood=mood;
+  $('milo-companion')?.setAttribute('mood',state.busy?'thinking':mood);
+  if(duration)companionTimer=setTimeout(()=>setCompanionMood('idle'),duration);
+}
+function setCompanionSequence(moods,duration=8000) {
+  setCompanionMood(moods[0]);
+  companionTimer=setTimeout(()=>moods.length>1?setCompanionSequence(moods.slice(1),duration):setCompanionMood('idle'),duration);
+}
+function companion(compact=false,mood=state.busy?'thinking':companionMood) {
+  return html`<milo-companion lang="${getLanguage()}" mood="${mood}" ${compact?'compact':''}></milo-companion>`;
+}
+function paint(markup) {
+  const previous=$('milo-companion');
+  $('#app').innerHTML=markup;
+  const next=$('milo-companion');
+  if(previous&&next){
+    for(const name of ['lang','mood','compact']){if(next.hasAttribute(name))previous.setAttribute(name,next.getAttribute(name));else previous.removeAttribute(name);}
+    next.replaceWith(previous);
+  }
+}
 const greetingDate = {format:date=>new Intl.DateTimeFormat(locale(),{month:'long',day:'numeric',weekday:'long'}).format(date)};
 function persistRecords(next) {
   try { localStorage.setItem(state.demoMode?DEMO_STORAGE:STORAGE, JSON.stringify(next)); state.records = next; return true; }
@@ -117,18 +143,23 @@ function starter(title,sub,symbol,kind,route) {
 }
 function renderMilo() {
   const today = state.records.filter(r=>r.kind!=='plan'&&new Date(r.date).toDateString()===new Date().toDateString()).sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const welcome = html`<section class="welcome" aria-label="Milo와 시작하기"><button class="mascot-button" data-action="hello" aria-label="Milo와 인사하기"><img class="mascot" src="/assets/milo-rounded.png" alt="둥근 몸으로 손을 흔드는 새 Milo" width="164" height="164"></button><div class="eyebrow">매일 조금씩, 나의 속도로</div><h1>오늘의 작은 기록,<br>함께 남겨볼까요?</h1><p class="intro">주사와 체중, 그리고 오늘의 이야기.<br>알려준 만큼만 함께 남겨요.</p><div class="starters">${starter(tr('주사 남기기'),tr('약 이름과 용량을 정확하게'),'syringe','injection')}${starter(tr('체중 남기기'),tr('오늘 측정한 나의 변화'),'monitor_weight','weight')}${starter(tr('한 주 돌아보기'),tr('쌓인 기록을 차분히 살펴요'),'show_chart',null,'progress')}${starter(tr('진료 준비'),tr('다음 만남을 위한 메모'),'clinical_notes',null,'visit')}</div></section>`;
+  const welcome = html`<section class="welcome" aria-label="Milo와 시작하기">${companion()}<div class="eyebrow">매일 조금씩, 나의 속도로</div><h1>오늘의 작은 기록,<br>함께 남겨볼까요?</h1><p class="intro">주사와 체중, 그리고 오늘의 이야기.<br>알려준 만큼만 함께 남겨요.</p><div class="starters">${starter(tr('주사 남기기'),tr('약 이름과 용량을 정확하게'),'syringe','injection')}${starter(tr('체중 남기기'),tr('오늘 측정한 나의 변화'),'monitor_weight','weight')}${starter(tr('한 주 돌아보기'),tr('쌓인 기록을 차분히 살펴요'),'show_chart',null,'progress')}${starter(tr('진료 준비'),tr('다음 만남을 위한 메모'),'clinical_notes',null,'visit')}</div></section>`;
   const transcript = html`<section class="transcript" aria-label="Milo와의 대화" aria-live="polite">${state.messages.map((m,i)=>html`<article class="message ${m.role} ${m.error?'error':''}">${m.role==='assistant'?'<img class="message-avatar" src="/assets/milo-rounded.png" alt="">':''}<div class="message-body">${m.role==='assistant'?'<div class="speaker">Milo</div>':''}${esc(m.text)}${m.role==='assistant'&&!m.error?html`<div class="message-reactions"><button data-action="reaction" data-index="${i}" aria-label="답변에 공감하기" aria-pressed="${!!m.liked}">${icon(m.liked?'favorite':'favorite_border')}</button></div>`:''}</div></article>`).join('')}${state.busy?html`<article class="message"><img class="message-avatar" src="/assets/milo-rounded.png" alt=""><div><div class="muted small">Milo가 답변을 준비하고 있어요</div><div class="thinking" role="status" aria-label="답변 기다리는 중"><i></i><i></i><i></i></div></div></article>`:''}${state.messages.length&&!state.busy?html`<div class="chat-followups"><md-outlined-button data-action="log" data-kind="injection">주사 기록</md-outlined-button><md-outlined-button data-action="log" data-kind="weight">체중 기록</md-outlined-button><md-text-button data-action="navigate" data-route="journal">기록 보기</md-text-button></div>`:''}</section>`;
-  return html`<div class="milo-layout"><div class="conversation">${state.messages.length?transcript:welcome}<div class="composer-wrap"><form class="composer" id="chat-form"><md-icon-button data-action="log" type="button" aria-label="기록 종류 선택">${mi('add')}</md-icon-button><textarea id="chat-input" aria-label="Milo에게 메시지" placeholder="Milo에게 편하게 이야기해요" rows="1" maxlength="8000">${esc(state.composer)}</textarea><md-filled-icon-button id="send-button" type="submit" aria-label="메시지 보내기" ${state.busy?'disabled':''}>${mi('arrow_upward')}</md-filled-icon-button></form><p class="composer-note">${icon('lock')}보내는 대화만 Gemini에 전달돼요 · 기록은 내가 확인한 뒤에</p></div></div>
+  return html`<div class="milo-layout"><div class="conversation">${state.messages.length?html`<div class="conversation-companion">${companion(true)}</div>${transcript}`:welcome}<div class="composer-wrap"><form class="composer" id="chat-form"><md-icon-button data-action="log" type="button" aria-label="기록 종류 선택">${mi('add')}</md-icon-button><textarea id="chat-input" aria-label="Milo에게 메시지" placeholder="Milo에게 편하게 이야기해요" rows="1" maxlength="8000">${esc(state.composer)}</textarea><md-filled-icon-button id="send-button" type="submit" aria-label="메시지 보내기" ${state.busy?'disabled':''}>${mi('arrow_upward')}</md-filled-icon-button></form><p class="composer-note">${icon('lock')}보내는 대화만 Gemini에 전달돼요 · 기록은 내가 확인한 뒤에</p></div></div>
     <aside class="context-panel" aria-label="오늘의 기록 요약"><section class="today-card"><div class="section-line"><h2>오늘의 기록</h2><span class="muted small">${new Date().toLocaleDateString(locale(),{month:'numeric',day:'numeric'})}</span></div>${today.length?today.slice(0,4).map(r=>html`<div class="mini-record">${icon(TYPES[r.kind].icon)}<div><strong>${esc(titleFor(r,state.preferences.unit))}</strong><small>${esc(detailFor(r))}</small></div></div>`).join(''):html`<div class="today-empty"><div class="empty-orbit">${icon('edit_note')}</div><b>작은 기록부터 시작해요</b><p>오늘의 주사, 체중, 컨디션.<br>하나씩 남겨도 충분해요.</p></div>`}<md-text-button data-action="navigate" data-route="journal">기록 열기${mi('arrow_forward')}</md-text-button></section><section class="care-note">${icon('favorite')}<b>완벽하지 않아도 괜찮아요.</b><p>기록이 비어 있는 날도, 잠시 쉬어가는 날도 나의 여정에 포함돼요.</p></section><div class="context-links">${icon('verified_user')}내가 선택한 기록만, 내 브라우저에.</div></aside></div>`;
 }
 function journalTools() {return html`<nav class="journal-tools" aria-label="기록 메뉴">${journalRoutes.map(([r,l,s,i])=>html`<button class="journal-tool" data-action="navigate" data-route="${r}">${icon(i)}<span><b>${l}</b><small>${s}</small></span>${icon('chevron_right').replace('class="symbols"','class="symbols chevron"')}<md-ripple></md-ripple></button>`).join('')}</nav>`;}
 function heading(title,description,eyebrow='MY JOURNAL',action='') {return html`<div class="page-heading"><div><div class="eyebrow">${eyebrow}</div><h1>${title}</h1><p>${description}</p></div>${action}</div>`;}
 function back() {const me=['plan','visit','story','settings'].includes(state.route);return html`<md-text-button class="route-back no-print" data-action="navigate" data-route="${me?'me':'journal'}">${mi('arrow_back')}${me?tr('나'):tr('기록')}</md-text-button>`;}
 function empty(title,description,symbol='menu_book',kind) {return html`<div class="empty-state">${icon(symbol)}<h2>${title}</h2><p>${description}</p>${kind?html`<md-filled-button data-action="log" data-kind="${kind}">${mi('add')}첫 기록 남기기</md-filled-button>`:''}</div>`;}
+function mealPhoto(record,large=false) {
+  const photo=record.demo&&record.kind==='meal'&&record.photo?.synthetic&&/^\/assets\/demo-meals\/(chicken|tofu|yogurt|korean)-v1\.webp$/.test(record.photo.src)?record.photo:null;
+  if(!photo)return record.kind==='meal'?html`<small class="text-record-label">사진 없는 기록</small>`:'';
+  return html`<span class="record-photo ${large?'large':''}"><img src="${photo.src}" alt="${esc(photo.alt)}" loading="lazy" width="${large?560:220}" height="${large?350:138}"><small>합성 사진 · 데모</small></span>`;
+}
 function recordRows(records) {
   let lastDay='';
-  return [...records].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>{const day=new Date(r.date).toLocaleDateString(locale(),{month:'long',day:'numeric',weekday:'short'});const label=day===lastDay?'':html`<h3 class="timeline-day">${day}</h3>`;lastDay=day;return html`${label}<button class="record-row" data-action="detail" data-id="${r.id}"><span class="icon-tile">${icon(TYPES[r.kind].icon)}</span><span class="record-main"><b>${esc(titleFor(r,state.preferences.unit))}</b><small>${esc(detailFor(r))}</small></span><time>${new Date(r.date).toLocaleTimeString(locale(),{hour:'numeric',minute:'2-digit'})}</time>${icon('chevron_right')}</button>`;}).join('');
+  return [...records].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>{const day=new Date(r.date).toLocaleDateString(locale(),{month:'long',day:'numeric',weekday:'short'});const label=day===lastDay?'':html`<h3 class="timeline-day">${day}</h3>`;lastDay=day;return html`${label}<button class="record-row" data-action="detail" data-id="${r.id}"><span class="icon-tile">${icon(TYPES[r.kind].icon)}</span><span class="record-main"><b>${esc(titleFor(r,state.preferences.unit))}</b><small>${esc(detailFor(r))}</small>${mealPhoto(r)}</span><time>${new Date(r.date).toLocaleTimeString(locale(),{hour:'numeric',minute:'2-digit'})}</time>${icon('chevron_right')}</button>`;}).join('');
 }
 function renderJournal() {
   const section=state.recordsSection;
@@ -174,29 +205,29 @@ function renderSettings() {
   return html`<div class="page-content" style="max-width:800px">${back()}${heading(tr('나에게 맞는 Milo'),tr('보기 편한 화면과 나의 기록을 직접 관리해요.'),'PREFERENCES')}<section class="surface-card settings-section demo-settings"><h2>심사용 데모</h2><p>실제 기록과 분리된 30일 샘플로 Milo를 둘러보세요.</p><div class="demo-settings-actions"><md-filled-tonal-button data-action="toggle-demo">${state.demoMode?tr('내 기록으로 돌아가기'):tr('30일 데모 보기')}</md-filled-tonal-button><md-outlined-button data-action="navigate" data-route="report">30일 리포트</md-outlined-button>${state.demoMode?html`<md-text-button data-action="reset-demo">샘플 다시 만들기</md-text-button>`:''}</div></section><section class="surface-card settings-section"><h2>Language / 언어</h2><div class="settings-row"><div><strong>앱 언어</strong><p>메뉴와 안내, 앞으로 받을 답변의 언어를 선택해요.</p></div><div class="segmented language-control" role="group" aria-label="Language"><button data-action="preference" data-key="language" data-value="ko" class="${p.language!=='en'?'selected':''}" aria-pressed="${p.language!=='en'}">KOREAN</button><button data-action="preference" data-key="language" data-value="en" class="${p.language==='en'?'selected':''}" aria-pressed="${p.language==='en'}">ENGLISH</button></div></div></section><section class="surface-card settings-section"><h2>화면과 표시</h2><div class="settings-row"><div><strong>화면 테마</strong><p>지금 편안한 화면을 선택해요.</p></div><div class="segmented" role="group" aria-label="화면 테마">${[['light',tr('밝게')],['dark',tr('어둡게')],['system',tr('기기 설정')]].map(([v,l])=>html`<button class="${p.theme===v?'selected':''}" data-action="preference" data-key="theme" data-value="${v}" aria-pressed="${p.theme===v}">${tr(l)}</button>`).join('')}</div></div><div class="settings-row"><div><strong>나의 색상</strong><p>Milo Blue를 기본으로.</p></div><div class="palette-options">${[['blue','Milo Blue','#2c68ce'],['sage','Sage','#2d6c54'],['indigo','Soft Indigo','#6256b1']].map(([v,l,c])=>html`<button class="palette-swatch ${p.palette===v?'selected':''}" style="--swatch:${c}" data-action="preference" data-key="palette" data-value="${v}" aria-label="${l}" aria-pressed="${p.palette===v}"></button>`).join('')}</div></div><div class="settings-row"><div><strong>체중 단위</strong><p>기록은 kg 기준으로 보관해요.</p></div><div class="segmented" role="group" aria-label="체중 단위">${['kg','lb'].map(v=>html`<button class="${p.unit===v?'selected':''}" data-action="preference" data-key="unit" data-value="${v}" aria-pressed="${p.unit===v}">${v}</button>`).join('')}</div></div></section><section class="surface-card settings-section"><h2>나의 데이터</h2><div class="settings-row"><div><strong>기록 내보내기</strong><p>이 브라우저에 저장한 기록 ${state.records.length}건을 JSON 파일로.</p></div><md-outlined-button data-action="export">${mi('download')}내보내기</md-outlined-button></div><div class="settings-row"><div><strong>기록 비우기</strong><p>이 브라우저의 기록을 삭제해요.</p></div><md-text-button class="danger-button" data-action="clear-records">기록 비우기</md-text-button></div><div class="privacy-callout">${icon('lock')}<div>기록은 이 브라우저의 저장 공간에만 보관돼요. 다른 기기와 자동 동기화되지 않으며, 브라우저 데이터를 지우면 사라질 수 있어요. 대화에서 보내는 메시지만 Gemini로 전달돼요.</div></div></section></div>`;
 }
 function render() {
-  if(!state.preferences.onboardingDone){$('#app').innerHTML=renderIntroduction();bindIntroduction();return;}
+  if(!state.preferences.onboardingDone){paint(renderIntroduction());bindIntroduction();return;}
   ensureDemoMode();
   const views={report:renderReport,me:renderMe,health:renderHealth,milo:renderMilo,journal:renderJournal,overview:renderOverview,progress:renderProgress,plan:renderPlan,visit:renderVisit,story:renderStory,settings:renderSettings};
   if(!views[state.route])state.route='milo';
-  $('#app').innerHTML=shell(views[state.route]());
+  paint(shell(views[state.route]()));
   $('#records-sections')?.addEventListener('change',event=>{const index=event.target.activeTabIndex;if(index!==state.recordsSection){state.recordsSection=index;render();}});
   $('#journal-search')?.addEventListener('input',event=>{state.query=event.target.value;$('#record-results').innerHTML=journalResults();});
   const input=$('#chat-input');
-  if(input){input.addEventListener('input',()=>{state.composer=input.value;persistConversation();input.style.height='auto';input.style.height=Math.min(input.scrollHeight,130)+'px';});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}});}
+  if(input){input.addEventListener('input',()=>{state.composer=input.value;if(!state.busy)setCompanionMood(input.value.trim()?conversationMoods(input.value)[0]:'idle');persistConversation();input.style.height='auto';input.style.height=Math.min(input.scrollHeight,130)+'px';});input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendChat();}});}
   $('#story-input')?.addEventListener('input',e=>{state.story=e.target.value;$('#story-preview').textContent=state.story||tr('오늘의 나를 위해\n작은 한 걸음을 내디뎠어요.');});
   $('#visit-questions')?.addEventListener('input',e=>{state.questions=e.target.value;});
 }
 
 async function sendChat() {
   const text=state.composer.trim();if(!text||state.busy)return;
-  state.messages.push({role:'user',text});state.composer='';persistConversation();state.busy=true;render();
+  state.messages.push({role:'user',text});state.composer='';persistConversation();state.busy=true;setCompanionMood('thinking');render();
   requestAnimationFrame(()=>$('#chat-input')?.scrollIntoView({block:'nearest',behavior:'smooth'}));
   try {
     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,language:getLanguage(),history:state.messages.slice(0,-1).filter(m=>!m.error).slice(-6).map(m=>({role:m.role,text:m.text.slice(0,1500)}))}),signal:AbortSignal.timeout(130000)});
     const data=await response.json();if(!response.ok)throw new Error(data.error||tr('Milo와 연결하지 못했어요. 잠시 후 다시 보내 주세요.'));
-    state.messages.push({role:'assistant',text:data.reply});state.ai=data.mode==='live'?'live':'demo';
+    state.messages.push({role:'assistant',text:data.reply});state.ai=data.mode==='live'?'live':'demo';setCompanionSequence(conversationMoods(text));
   } catch {
-    state.messages.push({role:'assistant',text:tr('지금은 답변을 받지 못했어요. 보내려던 내용은 입력창에 남겨둘게요. 직접 기록은 계속 사용할 수 있어요.'),error:true});state.composer=text;state.ai='error';
+    state.messages.push({role:'assistant',text:tr('지금은 답변을 받지 못했어요. 보내려던 내용은 입력창에 남겨둘게요. 직접 기록은 계속 사용할 수 있어요.'),error:true});state.composer=text;state.ai='error';setCompanionMood('comfort',9000);
   } finally {persistConversation();state.busy=false;if(state.route==='milo'){render();requestAnimationFrame(()=>$('#chat-input')?.scrollIntoView({block:'nearest',behavior:'smooth'}));}}
 }
 
@@ -227,7 +258,7 @@ async function saveRecord() {
   catch(error){$('#log-error').textContent=tr(error.message);return;}
   if(record.kind==='injection'&&state.records.some(r=>r.kind==='injection'&&r.medication===record.medication&&Number(r.dose)===Number(record.dose)&&Math.abs(new Date(r.date)-new Date(record.date))<60000)){$('#log-error').textContent=tr('같은 시각에 남긴 주사 기록이 있어요. 기록을 확인해 주세요.');return;}
   if(!persistRecords([...state.records,record]))return;
-  await $('#record-dialog').close();render();toast(html`${tr(TYPES[record.kind].title)}을 저장했어요.`,tr('되돌리기'),()=>{if(persistRecords(state.records.filter(r=>r.id!==record.id))){render();toast(tr('방금 저장한 기록을 되돌렸어요.'));}});
+  await $('#record-dialog').close();setCompanionMood(moodForRecord(record),10000);render();toast(html`${tr(TYPES[record.kind].title)}을 저장했어요.`,tr('되돌리기'),()=>{if(persistRecords(state.records.filter(r=>r.id!==record.id))){render();toast(tr('방금 저장한 기록을 되돌렸어요.'));}});
 }
 async function info(title,content,actions=tr('<md-text-button data-action="close-info">닫기</md-text-button>')) {
   $('#info-headline').textContent=title;$('#info-content').innerHTML=content;$('#info-actions').innerHTML=actions;
@@ -236,7 +267,7 @@ async function info(title,content,actions=tr('<md-text-button data-action="close
 function detail(id) {
   const r=state.records.find(r=>r.id===id);if(!r)return;
   const values=[[tr('기록 종류'),tr(TYPES[r.kind].title)],[tr('기록 내용'),titleFor(r,state.preferences.unit)],[tr('세부 내용'),detailFor(r)],[tr('날짜'),new Date(r.date).toLocaleString(locale())]];
-  info(tr(TYPES[r.kind].title),html`<dl class="detail-grid">${values.map(([k,v])=>html`<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="caption">이 기록은 현재 브라우저에만 저장되어 있어요.</p>`,html`<md-text-button class="danger-button" data-action="delete-record" data-id="${id}">삭제</md-text-button><md-text-button data-action="close-info">닫기</md-text-button>`);
+  info(tr(TYPES[r.kind].title),html`${r.kind==='meal'?mealPhoto(r,true):''}<dl class="detail-grid">${values.map(([k,v])=>html`<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="caption">이 기록은 현재 브라우저에만 저장되어 있어요.</p>`,html`<md-text-button class="danger-button" data-action="delete-record" data-id="${id}">삭제</md-text-button><md-text-button data-action="close-info">닫기</md-text-button>`);
 }
 function download(name,text,type='text/plain;charset=utf-8') {const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function downloadStory() {
@@ -259,10 +290,10 @@ async function action(node) {
   if(a==='filter'){state.filter=node.dataset.filter;render();return;}
   if(a==='period'){state.period=Number(node.dataset.days);render();return;}
   if(a==='detail')return detail(id);
-  if(a==='hello'){node.classList.remove('hello');void node.offsetWidth;node.classList.add('hello');return;}
+  if(a==='hello'){$('milo-companion')?.play('wave');return;}
   if(a==='preference'){state.preferences[key]=value;if(key==='language')$('#snackbar').hidden=true;savePreferences();return;}
-  if(a==='reaction'){const m=state.messages[Number(node.dataset.index)];m.liked=!m.liked;persistConversation();render();return;}
-  if(a==='new-chat'){if(state.busy){toast(tr('지금 준비 중인 답변을 받은 뒤 새 대화를 시작할 수 있어요.'));return;}if(state.composer.trim()){toast(tr('입력 중인 이야기를 먼저 보내거나 지워 주세요.'));return;}state.messages=[];persistConversation();render();return;}
+  if(a==='reaction'){const m=state.messages[Number(node.dataset.index)];m.liked=!m.liked;persistConversation();if(m.liked)setCompanionMood('celebrate',4500);render();return;}
+  if(a==='new-chat'){if(state.busy){toast(tr('지금 준비 중인 답변을 받은 뒤 새 대화를 시작할 수 있어요.'));return;}if(state.composer.trim()){toast(tr('입력 중인 이야기를 먼저 보내거나 지워 주세요.'));return;}state.messages=[];persistConversation();setCompanionMood('idle');render();return;}
   if(a==='connection')return info(tr('Milo와 대화하기'),html`<div class="form-stack"><p>보내는 메시지와 최근 대화의 일부가 Google Gemini로 전달되어 답변을 만들어요.</p><p>저장한 건강 기록은 대화에 자동으로 첨부하지 않아요. 보내고 싶은 내용만 직접 적어 주세요.</p><div class="privacy-callout">${icon('lock')}나의 기록은 현재 브라우저에 저장돼요. iOS 앱의 기록이나 다른 기기와 자동으로 연결되지 않아요.</div><p class="caption">${state.ai==='error'?tr('현재 대화 연결에 문제가 있어요. 직접 기록은 계속 사용할 수 있어요.'):tr('AI는 의료진을 대신하지 않아요. 처방이나 용량 변경은 담당 의료진과 상의해 주세요.')}</p></div>`);
   if(a==='delete-record'){const r=state.records.find(r=>r.id===id);if(!r)return;if(persistRecords(state.records.filter(r=>r.id!==id))){await $('#info-dialog').close();render();toast(tr('기록을 삭제했어요.'),tr('되돌리기'),()=>{if(persistRecords([...state.records,r]))render();});}return;}
   if(a==='export'){download(tr('Milo-나의-기록.json'),JSON.stringify({format:'milo-journal-v1',exportedAt:new Date().toISOString(),records:state.records},null,2),'application/json');toast(tr('기록 파일을 내보냈어요.'));return;}
@@ -296,7 +327,7 @@ function renderIntroduction() {
     [tr('어떻게 불러드릴까요?'),tr('우리, 조금 더 편하게'),tr('이름이나 별명을 알려주세요.\n지금 정하지 않아도 괜찮아요.')]
   ];
   const [title,kicker,body]=pages[step];
-  return html`<main id="main" class="introduction"><header class="intro-top"><div class="intro-brand">Milo<span>.</span></div><md-text-button data-action="intro-skip">나중에 할게요</md-text-button></header><div class="intro-body"><div class="intro-illustration"><img src="/assets/milo-rounded.png" alt="손을 흔들며 반기는 파란 Milo" width="260" height="260"></div><div class="intro-copy"><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${esc(body)}</p>${step===3?html`<md-outlined-text-field id="intro-name" label="이름 또는 별명 (선택)" maxlength="24" value="${esc(state.preferences.nameDraft||state.preferences.name)}" autocomplete="nickname" supporting-text="‘나’에서 언제든 바꿀 수 있어요."></md-outlined-text-field>`:''}</div></div><footer class="intro-footer"><div class="intro-progress" aria-label="소개 ${step+1} / 4">${pages.map((_,i)=>html`<span class="${i===step?'current':''}"></span>`).join('')}</div><div class="intro-controls">${step?html`<md-text-button data-action="intro-back">${mi('arrow_back')}이전</md-text-button>`:'<span></span>'}<md-filled-button data-action="${step===3?'intro-finish':'intro-next'}">${step===3?tr('Milo와 시작하기'):tr('다음')}${mi('arrow_forward')}</md-filled-button></div><p class="intro-privacy">${icon('lock')}시작하기 위해 건강 정보를 입력할 필요는 없어요.</p></footer></main>`;
+  return html`<main id="main" class="introduction"><header class="intro-top"><div class="intro-brand">Milo<span>.</span></div><md-text-button data-action="intro-skip">나중에 할게요</md-text-button></header><div class="intro-body"><div class="intro-illustration">${companion(false,step===0?'wave':step===1?'comfort':'listening')}</div><div class="intro-copy"><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${esc(body)}</p>${step===3?html`<md-outlined-text-field id="intro-name" label="이름 또는 별명 (선택)" maxlength="24" value="${esc(state.preferences.nameDraft||state.preferences.name)}" autocomplete="nickname" supporting-text="‘나’에서 언제든 바꿀 수 있어요."></md-outlined-text-field>`:''}</div></div><footer class="intro-footer"><div class="intro-progress" aria-label="소개 ${step+1} / 4">${pages.map((_,i)=>html`<span class="${i===step?'current':''}"></span>`).join('')}</div><div class="intro-controls">${step?html`<md-text-button data-action="intro-back">${mi('arrow_back')}이전</md-text-button>`:'<span></span>'}<md-filled-button data-action="${step===3?'intro-finish':'intro-next'}">${step===3?tr('Milo와 시작하기'):tr('다음')}${mi('arrow_forward')}</md-filled-button></div><p class="intro-privacy">${icon('lock')}시작하기 위해 건강 정보를 입력할 필요는 없어요.</p></footer></main>`;
 }
 function bindIntroduction() {
   $('#intro-name')?.addEventListener('input',event=>{
@@ -311,7 +342,7 @@ function renderMe() {
   const name=state.preferences.name;
   const plans=state.records.filter(r=>r.kind==='plan');
   const memories=Array.isArray(state.preferences.memories)?state.preferences.memories:[];
-  return html`<div class="page-content me-page">${heading(name?html`${esc(name)}님의 Milo`:tr('나의 방식대로, Milo'),tr('편안하게 부를 이름부터, 나에게 맞는 앱 사용 방식까지.'),'A LITTLE MORE ME')}<section class="profile-panel"><img src="/assets/milo-rounded.png" alt="나의 친구 Milo" width="110" height="110"><div><h2>나는 이렇게 불러줘요</h2><p>이름은 선택이에요. 언제든 바꿀 수 있어요.</p><div class="name-editor"><md-outlined-text-field id="profile-name" label="이름 또는 별명" value="${esc(name)}" maxlength="24" autocomplete="nickname"></md-outlined-text-field><md-filled-tonal-button data-action="save-name">저장</md-filled-tonal-button></div></div></section><div class="me-columns"><section><h2 class="group-title">나와 함께하는 것들</h2><div class="me-group">${meRow(tr('나의 일정'),plans.length?html`직접 남긴 처방 계획 ${plans.length}건`:tr('안내받은 처방 계획을 남겨요'),'assignment','navigate','plan')}${meRow(tr('Milo가 알고 있는 것'),memories.length?html`내가 확인한 메모 ${memories.length}개`:tr('기억해 두고 싶은 나의 이야기'),'favorite','memories')}${meRow(tr('진료 준비'),tr('기록과 질문을 한곳에'),'clinical_notes','navigate','visit')}${meRow(tr('작은 성취 공유'),tr('내가 고른 문장으로 만드는 한 장'),'auto_awesome','navigate','story')}</div></section><section><h2 class="group-title">나에게 맞는 사용 방식</h2><div class="me-group">${meRow(tr('앱 사용 방식'),tr('화면 테마 · 색상 · 체중 단위'),'settings','navigate','settings')}${meRow(tr('알림'),tr('웹에서 가능한 알림 안내'),'notifications','reminders')}${meRow(tr('건강 정보'),tr('기기 건강 데이터 연결 상태'),'favorite_border','health-info')}${meRow(tr('AI 연결'),tr('Gemini와 대화 · 데이터 안내'),'chat_bubble','connection')}${meRow(tr('나의 데이터'),tr('내 기록을 내보내고 관리해요'),'lock','navigate','settings')}</div></section></div><p class="me-footnote">한국어 · 이 브라우저에 보관되는 나의 공간</p></div>`;
+  return html`<div class="page-content me-page">${heading(name?html`${esc(name)}님의 Milo`:tr('나의 방식대로, Milo'),tr('편안하게 부를 이름부터, 나에게 맞는 앱 사용 방식까지.'),'A LITTLE MORE ME')}<section class="profile-panel">${companion(true)}<div><h2>나는 이렇게 불러줘요</h2><p>이름은 선택이에요. 언제든 바꿀 수 있어요.</p><div class="name-editor"><md-outlined-text-field id="profile-name" label="이름 또는 별명" value="${esc(name)}" maxlength="24" autocomplete="nickname"></md-outlined-text-field><md-filled-tonal-button data-action="save-name">저장</md-filled-tonal-button></div></div></section><div class="me-columns"><section><h2 class="group-title">나와 함께하는 것들</h2><div class="me-group">${meRow(tr('나의 일정'),plans.length?html`직접 남긴 처방 계획 ${plans.length}건`:tr('안내받은 처방 계획을 남겨요'),'assignment','navigate','plan')}${meRow(tr('Milo가 알고 있는 것'),memories.length?html`내가 확인한 메모 ${memories.length}개`:tr('기억해 두고 싶은 나의 이야기'),'favorite','memories')}${meRow(tr('진료 준비'),tr('기록과 질문을 한곳에'),'clinical_notes','navigate','visit')}${meRow(tr('작은 성취 공유'),tr('내가 고른 문장으로 만드는 한 장'),'auto_awesome','navigate','story')}</div></section><section><h2 class="group-title">나에게 맞는 사용 방식</h2><div class="me-group">${meRow(tr('앱 사용 방식'),tr('화면 테마 · 색상 · 체중 단위'),'settings','navigate','settings')}${meRow(tr('알림'),tr('웹에서 가능한 알림 안내'),'notifications','reminders')}${meRow(tr('건강 정보'),tr('기기 건강 데이터 연결 상태'),'favorite_border','health-info')}${meRow(tr('AI 연결'),tr('Gemini와 대화 · 데이터 안내'),'chat_bubble','connection')}${meRow(tr('나의 데이터'),tr('내 기록을 내보내고 관리해요'),'lock','navigate','settings')}</div></section></div><p class="me-footnote">한국어 · 이 브라우저에 보관되는 나의 공간</p></div>`;
 }
 function renderHealth(embedded=false) {
   const weights=state.records.filter(r=>r.kind==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
