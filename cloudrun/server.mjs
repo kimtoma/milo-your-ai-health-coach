@@ -170,7 +170,24 @@ const server = http.createServer(async (req, res) => {
   if (!type) { res.writeHead(404); res.end('Not found'); return; }
   fs.readFile(filePath, (err, content) => {
     if (err) { res.writeHead(err.code === 'ENOENT' ? 404 : 500); res.end('Not found'); return; }
-    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': path.extname(filePath) === '.png' ? 'public, max-age=604800' : 'no-cache' });
+    const headers = { 'Content-Type': type, 'Content-Length': content.length, 'Cache-Control': path.extname(filePath) === '.png' ? 'public, max-age=604800' : 'no-cache' };
+    if (type === 'video/mp4') {
+      headers['Accept-Ranges'] = 'bytes';
+      // Inline video players can request a small probe or seek within a clip.
+      if (req.method === 'GET' && req.headers.range) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+        let start = match?.[1] ? Number(match[1]) : 0;
+        let end = match?.[2] ? Number(match[2]) : content.length - 1;
+        if (match && !match[1] && match[2]) { start = Math.max(0, content.length - end); end = content.length - 1; }
+        if (!match || (!match[1] && !match[2]) || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= content.length || end < start) {
+          res.writeHead(416, { 'Content-Range': `bytes */${content.length}` }); res.end(); return;
+        }
+        end = Math.min(end, content.length - 1);
+        res.writeHead(206, { ...headers, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${content.length}` });
+        res.end(content.subarray(start, end + 1)); return;
+      }
+    }
+    res.writeHead(200, headers);
     res.end(req.method === 'HEAD' ? undefined : content);
   });
 });

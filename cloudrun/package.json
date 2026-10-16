@@ -8,8 +8,7 @@
     "test": "node --test server.test.mjs src/*.test.mjs"
   },
   "dependencies": {
-    "@material/web": "2.5.0",
-    "three": "0.186.1"
+    "@material/web": "2.5.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2"

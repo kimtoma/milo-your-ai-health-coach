@@ -89,6 +89,29 @@ test('service identity authenticates real-mode requests and reuses its token', a
   }
 });
 
+test('MP4 clips support inline playback probes, seeking and HEAD requests', async t => {
+  const base = await startServer(t);
+  const url = `${base}/assets/milo/meal-v1.mp4`;
+  const full = await fetch(url);
+  const bytes = Buffer.from(await full.arrayBuffer());
+  assert.equal(full.headers.get('Content-Type'), 'video/mp4');
+  assert.equal(full.headers.get('Accept-Ranges'), 'bytes');
+  for (const [range, start, end] of [['bytes=0-1', 0, 1], ['bytes=20-', 20, bytes.length - 1], ['bytes=-20', bytes.length - 20, bytes.length - 1]]) {
+    const part = await fetch(url, {headers: {Range: range}});
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('Content-Range'), `bytes ${start}-${end}/${bytes.length}`);
+    assert.deepEqual(Buffer.from(await part.arrayBuffer()), bytes.subarray(start, end + 1));
+  }
+  for (const range of ['bytes=999999999-', 'bytes=2-1', 'bytes=-0', 'bytes=-', 'bytes=0-1,4-5']) {
+    const invalid = await fetch(url, {headers: {Range: range}});
+    assert.equal(invalid.status, 416);
+    assert.equal(invalid.headers.get('Content-Range'), `bytes */${bytes.length}`);
+  }
+  const head = await fetch(url, {method: 'HEAD'});
+  assert.equal(Number(head.headers.get('Content-Length')), bytes.length);
+  assert.equal((await head.arrayBuffer()).byteLength, 0);
+});
+
 test('recent conversation maps assistant turns to the provider model role', async t => {
   const base = await startServer(t, 'conversation');
   const response = await fetch(`${base}/api/chat`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
