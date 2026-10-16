@@ -44,7 +44,7 @@ The demo contains 30 weight measurements, 5 injection records, 30 meals, 20 acti
 
 No health records are automatically attached to AI chat. Records are stored in the current browser and do not automatically sync with the iOS app or another device. The hosted web build does not connect to Apple Health / Health Connect, analyze meal photos, provide live voice sessions, recommend injection-site rotation, or generate clinical conclusions. Medication and dose changes remain decisions for the user's clinician.
 
-The `app/` directory contains the earlier Android implementation. The submitted live experience is the independently runnable `cloudrun/` web app. Its navigation and rounded character follow the current MyGLPMate product direction; components and adaptive behavior use Material Design 3.
+The root `src/`, `server.ts` and Vite configuration retain the earlier React prototype. The submitted live experience is the independently runnable `cloudrun/` web app, selected by the root Dockerfile. Its navigation and rounded character follow the current MyGLPMate product direction; components and adaptive behavior use Material Design 3.
 
 ## Run locally
 
