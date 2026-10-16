@@ -253,7 +253,7 @@ fun LivingMiloStageCard(
                     val centerY = size.height * 0.54f
                     val baseRadius = size.minDimension * 0.31f
 
-                    // Voice Reactive Aura Rings (like ChatGPT Voice / Gemini Live)
+                    // Voice-reactive aura rings for live conversations.
                     if (isVoiceActive) {
                         val waveRadius1 = baseRadius * (1.35f + breathPhase * 0.25f + voiceDecibel * 0.2f)
                         val waveRadius2 = baseRadius * (1.18f + breathPhase * 0.15f)

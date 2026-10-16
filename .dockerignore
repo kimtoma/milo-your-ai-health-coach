@@ -7,3 +7,7 @@ local.properties
 *.aab
 *.jks
 *.keystore
+**/node_modules
+.git
+.env
+.env.*
