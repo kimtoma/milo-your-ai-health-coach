@@ -1,4 +1,5 @@
 import {MOODS, mediaForMood} from './milo-media.js';
+import {MiloVideoPlayer} from './milo-player.js';
 
 const COPY = {
   ko: {
@@ -67,36 +68,27 @@ class MiloCompanion extends HTMLElement {
     this.innerHTML = `<div class="companion-stage"><button class="milo-touch" type="button"><img class="companion-fallback" src="/assets/milo-rounded.png" alt="" width="384" height="384">${[0, 1].map(() => '<video class="companion-video" muted playsinline loop preload="auto" disablepictureinpicture aria-hidden="true" tabindex="-1"></video>').join('')}</button><div class="companion-tools"><button type="button" class="companion-replay">${glyph('replay')}</button><button type="button" class="companion-pause">${glyph('pause')}</button></div><button type="button" class="companion-retry" hidden></button></div><div class="companion-caption"><p class="companion-status" role="status" aria-live="polite"></p><p class="companion-hint"></p></div><div class="companion-actions" role="group">${['wave', 'walk', 'meal', 'injection'].map(mood => `<button type="button" data-motion="${mood}" aria-pressed="false">${glyph(mood)}<span class="motion-label"></span></button>`).join('')}</div>`;
     this.touch = this.querySelector('.milo-touch'); this.poster = this.querySelector('.companion-fallback');
     this.videos = [...this.querySelectorAll('video')];
-    for (const video of this.videos) {
-      video.muted = true;
-      video.addEventListener('loadeddata', () => {
-        if (video !== this.pendingVideo) return;
-        this.video?.pause();
-        this.videos.forEach(item => item.classList.toggle('is-active', item === video));
-        this.video = video; this.pendingVideo = null;
-        this.dataset.renderer = 'mp4'; this.dataset.loading = 'false';
-        this.updateLabels(); this.syncPlayback();
-      });
-      video.addEventListener('error', () => {
-        if (video !== this.pendingVideo && video !== this.video) return;
-        this.pendingVideo = null;
-        this.videos.forEach(item => { item.pause(); item.classList.remove('is-active'); });
-        this.video = null; this.poster.src = mediaForMood(this.mood).poster;
-        this.dataset.renderer = 'fallback'; this.dataset.loading = 'false'; this.dataset.animating = 'false'; this.updateLabels();
-      });
-      for (const event of ['playing', 'pause', 'waiting']) video.addEventListener(event, () => {
-        if (video === this.video) this.dataset.animating = String(event === 'playing');
-      });
-    }
+    this.player = new MiloVideoPlayer(this.videos, status => {
+      this.video = status.video;
+      this.dataset.renderer = status.video ? 'mp4' : status.error ? 'fallback' : 'loading';
+      this.dataset.loading = String(status.loading);
+      this.dataset.transitioning = String(status.transitioning);
+      this.dataset.animating = String(status.animating);
+      this.dataset.blocked = String(status.blocked);
+      this.dataset.mediaError = String(Boolean(status.error));
+      this.dataset.switches = String(status.switches);
+      if (!status.video) this.poster.src = mediaForMood(this.mood).poster;
+      this.updateLabels();
+    });
     this.addEventListener('click', event => {
       const motion = event.target.closest('[data-motion]');
       if (motion) { this.play(motion.dataset.motion); return; }
       if (event.target.closest('.companion-pause')) {
         this.paused = this.dataset.blocked === 'true' ? false : !this.paused;
-        this.dataset.blocked = 'false'; this.syncPlayback(); return;
+        this.dataset.blocked = 'false'; if (!this.paused) this.player.resume(); this.syncPlayback(); return;
       }
       if (event.target.closest('.companion-replay')) { this.replay(); return; }
-      if (event.target.closest('.companion-retry')) { this.clip = null; this.update(); return; }
+      if (event.target.closest('.companion-retry')) { this.player.select(mediaForMood(this.mood), {force: true}); return; }
       if (event.target.closest('.milo-touch')) this.play('wave');
     });
   }
@@ -119,28 +111,18 @@ class MiloCompanion extends HTMLElement {
     this.activeMood = mood; this.motionUntil = performance.now() + duration;
     clearTimeout(this.motionTimer);
     this.motionTimer = setTimeout(() => { this.motionUntil = 0; this.update(); }, duration);
-    const sameClip = this.clip === mediaForMood(this.mood).video;
-    this.update(); if (sameClip) this.replay();
+    this.update();
   }
-  replay() {
-    if (this.video?.readyState >= 2) this.video.currentTime = 0;
-    this.syncPlayback();
-  }
+  replay() { this.player.replay(); this.syncPlayback(); }
   update() {
-    const media = mediaForMood(this.mood);
-    if (this.clip !== media.video) {
-      this.clip = media.video; this.dataset.loading = 'true'; this.dataset.blocked = 'false';
-      const next = this.videos.find(video => video !== this.video);
-      this.pendingVideo = next; next.pause(); next.poster = media.poster; next.src = media.video; next.load();
-      if (!this.video) this.poster.src = media.poster;
-    }
+    this.player.select(mediaForMood(this.mood));
     this.updateLabels(); this.syncPlayback();
   }
   updateLabels() {
     const copy = this.copy;
     this.dataset.mood = this.mood; this.dataset.paused = String(this.paused);
     this.touch.setAttribute('aria-label', copy.touch);
-    const status = this.dataset.renderer === 'loading' ? copy.loading : this.dataset.renderer === 'fallback' ? copy.fallback : copy[this.mood];
+    const status = this.dataset.renderer === 'loading' ? copy.loading : this.dataset.renderer === 'fallback' || this.dataset.mediaError === 'true' ? copy.fallback : copy[this.mood];
     const label = this.querySelector('.companion-status');
     if (label.textContent !== status) label.textContent = status;
     this.querySelector('.companion-hint').textContent = copy.hint;
@@ -155,27 +137,16 @@ class MiloCompanion extends HTMLElement {
       button.setAttribute('aria-pressed', String(this.mood === button.dataset.motion));
     });
     const retry = this.querySelector('.companion-retry');
-    retry.hidden = this.dataset.renderer !== 'fallback'; retry.textContent = copy.retry;
+    retry.hidden = this.dataset.mediaError !== 'true'; retry.textContent = copy.retry;
   }
   syncPlayback() {
     if (!this.built) return;
     const shouldPlay = this.isConnected && this.visible && !document.hidden && !this.paused && !this.reduced?.matches;
-    this.videos.forEach(video => { if (video !== this.video || !shouldPlay) video.pause(); });
-    if (!shouldPlay) this.dataset.animating = 'false';
-    if (shouldPlay && this.video?.paused && this.video.readyState >= 2) {
-      const video = this.video;
-      video.play().then(() => {
-        if (video === this.video) { this.dataset.blocked = 'false'; this.updateLabels(); }
-      }).catch(error => {
-        if (error.name !== 'AbortError' && video === this.video) {
-          this.dataset.blocked = 'true'; this.dataset.animating = 'false'; this.updateLabels();
-        }
-      });
-    }
+    this.player.setPlaying(shouldPlay, Boolean(this.reduced?.matches));
     this.updateLabels();
   }
   dispose() {
-    this.videos?.forEach(video => video.pause()); clearTimeout(this.motionTimer); this.motionUntil = 0;
+    this.player?.suspend(); clearTimeout(this.motionTimer); this.motionUntil = 0;
     this.intersection?.disconnect(); this.reduced?.removeEventListener('change', this.onMotion);
     document.removeEventListener('visibilitychange', this.onVisibility); this.observing = false;
   }

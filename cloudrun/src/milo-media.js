@@ -1,4 +1,4 @@
-import resources from '../public/assets/milo/manifest-v1.json' with {type: 'json'};
+import resources from '../public/assets/milo/manifest-v2.json' with {type: 'json'};
 
 export const MOODS = Object.freeze([...Object.keys(resources), 'listening']);
 

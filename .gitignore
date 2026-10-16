@@ -17,3 +17,6 @@ local.properties
 .env
 debug.keystore
 node_modules/
+
+# Offline animation renderer cache
+**/__pycache__/

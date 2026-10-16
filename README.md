@@ -22,7 +22,7 @@ The demo contains 30 weight measurements, 5 injection records, 30 meals, 20 acti
 ## What works in the hosted app
 
 - **Living 2D companion:** Eight MP4 loops made from illustrated sprite frames preserve Milo’s original pastel-blue plush appearance: idle, hello, walking, eating with a bowl and spoon, a post-injection bandage, thinking, comfort and celebration. Local conversation cues and confirmed record types choose the animation; multiple activities in one message play in order. A medication plan or an explicitly untaken dose does not trigger the bandage pose.
-- **Comfortable motion:** Silent H.264 MP4 videos play inline and loop. The next clip loads before the visible clip changes. Playback pauses offscreen, in a hidden tab, or through the pause control, and respects reduced-motion preferences. A still image remains available if video playback fails.
+- **Comfortable motion:** Silent H.264 MP4 videos play inline and loop. The next clip is decoded and starts presenting frames before a 220 ms dissolve; the outgoing clip keeps moving throughout the transition. Repeating the same action preserves playback position. Rapid changes are coalesced without overwriting a visible video layer. Playback pauses offscreen, in a hidden tab, or through the pause control, and respects reduced-motion preferences. A still image remains available if video playback fails.
 - **Continuing conversation:** submitted messages and the most recent six turns are sent to Gemini 4 Argon. The browser retains up to 100 messages and an unsent draft across navigation and reloads.
 - **Reviewed record entry:** injections, measured weight, meals, activities, check-ins and medication plans have explicit save actions. Changing a medicine does not fill in a dose. A plan never creates an injection taken.
 - **Record history:** searchable timeline, type filters, weight charts and separate Records / Trends / Health views. Synthetic meal samples mix clearly labeled photorealistic example images with text-only entries; existing demo records gain these images without replacing saved IDs or personal records.
@@ -31,7 +31,9 @@ The demo contains 30 weight measurements, 5 injection records, 30 meals, 20 acti
 - **Personal settings:** optional name, user-confirmed notes, prescribed schedule, theme, color, weight units, record export and deletion with undo.
 - **Adaptive Material UI:** desktop navigation, tablet rail, mobile bottom navigation, official Material Web controls and the interactive Milo companion.
 
-The [Motion Studio](https://milo-health-coach-91706530537.asia-northeast3.run.app/milo-lab.html) shows the original illustration and the 2D animated Milo, with action buttons and a sentence preview that never transmits or saves the entered text. Each action uses a six-second, 512 × 512, 24 fps H.264 MP4. The source sprite sheets, posters and video paths are kept in `cloudrun/public/assets/milo/manifest-v1.json`.
+The [Motion Studio](https://milo-health-coach-91706530537.asia-northeast3.run.app/milo-lab.html) shows the original illustration and the 2D animated Milo, with action buttons and a sentence preview that never transmits or saves the entered text. Each action uses a 512 × 512, 30 fps H.264 MP4 with an authored 1.6–5 second cycle. Bidirectional motion interpolation fills the gaps between the original sprite poses, including the last-to-first wrap, and brief blink timing keeps the resting animation gentle. The source sprite sheets, posters and video paths are kept in `cloudrun/public/assets/milo/manifest-v2.json` (the original v1 artwork and videos are retained).
+
+The offline renderer, `cloudrun/tools/smooth-milo-videos.py`, uses [FFmpeg motion interpolation](https://ffmpeg.org/ffmpeg-filters.html#minterpolate), Python, NumPy and OpenCV. Regeneration is optional; the committed MP4s run with no Python or interpolation work in the browser. Original sprite hashes are recorded in the manifest and verified by the test suite. The player uses [video frame callbacks](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback) with a presentation fallback on older browsers.
 
 ## Architecture
 
@@ -94,7 +96,7 @@ The Dockerfile builds static assets in a separate stage. The runtime image conta
 
 ## Verification
 
-The automated suite covers bundled MP4 resources, conversation action ordering, mixed photo/text demo records, service-identity authentication, provider failures, conversation continuity, language selection, exact dose preservation, kg/lb conversion, missing-value handling, isolated synthetic records, report calculations and user-text preservation during localization. The live service has also been checked for real Gemini replies in Korean and English, persistent browser state, responsive navigation and report rendering.
+The automated suite covers bundled MP4 resources, first-frame readiness, uninterrupted dissolves, rapid action changes, repeat-action continuity, reduced-motion playback, conversation action ordering, mixed photo/text demo records, service-identity authentication, provider failures, conversation continuity, language selection, exact dose preservation, kg/lb conversion, missing-value handling, isolated synthetic records, report calculations and user-text preservation during localization. The live service has also been checked for real Gemini replies in Korean and English, persistent browser state, responsive navigation and report rendering.
 
 ## 한국어 안내
 
