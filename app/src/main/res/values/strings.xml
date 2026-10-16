@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Milo (마일로)</string>
+    <string name="milo_subtitle">GLP-1 &amp; 멘탈 케어 AI 컴패니언 · Galaxy Z Fold 7 Edition</string>
+    <string name="posture_unfolded">펼침 대화면 (8.0\")</string>
+    <string name="posture_flex">플렉스 모드 (115°)</string>
+    <string name="posture_cover">커버 화면 (6.3\")</string>
+    <string name="tab_zero_effort">확인형 기록</string>
+    <string name="tab_glp1_care">GLP-1 주사케어</string>
+    <string name="tab_milo_motions">마일로 모션(14종)</string>
+    <string name="tab_doctor_report">병원용 리포트</string>
+</resources>
