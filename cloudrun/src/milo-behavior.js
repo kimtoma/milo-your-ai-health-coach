@@ -7,7 +7,8 @@ const rules=[
 ];
 export function conversationMoods(text=''){
   if(distress.test(text))return ['comfort'];
-  const found=rules.map(([mood,pattern])=>({mood,index:String(text).search(pattern)})).filter(x=>x.index>=0).sort((a,b)=>a.index-b.index).map(x=>x.mood);
+  const injectionNotTaken=/(?:안|못)\s*맞|맞지\s*않|(?:haven't|have not|didn't|did not|never|not)\s+(?:(?:yet|actually|my|an|the)\s+){0,3}(?:inject|injected|had|got|taken|take|get|have)|(?:skipped|missed|postponed).{0,18}(?:injection|shot|dose)/i.test(text);
+  const found=rules.map(([mood,pattern])=>({mood,index:String(text).search(pattern)})).filter(x=>x.index>=0&&!(x.mood==='injection'&&injectionNotTaken)).sort((a,b)=>a.index-b.index).map(x=>x.mood);
   return found.length?found:['listening'];
 }
 export function moodForRecord(record){return {injection:'injection',meal:'meal',activity:'walk',checkin:'comfort',weight:'celebrate',plan:'listening'}[record.kind]||'celebrate';}

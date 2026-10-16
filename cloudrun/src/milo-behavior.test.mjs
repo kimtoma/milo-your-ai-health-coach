@@ -8,6 +8,9 @@ test('Completed activities select their own animation in message order',()=>{
   assert.deepEqual(conversationMoods('I ate lunch and walked for 20 minutes.'),['meal','walk']);
   assert.deepEqual(conversationMoods('I got my injection today.'),['injection']);
   assert.deepEqual(conversationMoods('내일 주사를 맞아야 할까요?'),['listening']);
+  assert.deepEqual(conversationMoods('오늘 주사를 안 맞았어.'),['listening']);
+  assert.deepEqual(conversationMoods("I haven't had my injection today."),['listening']);
+  assert.deepEqual(conversationMoods('오늘 걸었고 주사는 아직 못 맞았어.'),['walk']);
   assert.deepEqual(conversationMoods('I walked today but I am worried.'),['comfort']);
   assert.equal(moodForRecord({kind:'injection'}),'injection');
   assert.equal(moodForRecord({kind:'plan'}),'listening');
