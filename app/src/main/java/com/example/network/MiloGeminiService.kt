@@ -11,13 +11,23 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * Multi-Agent Orchestration Service aligned with the Gemini 4 Argon Hackathon Builder Guide:
+ * - Lead Brain & Clinical Report Orchestrator: `gemini-4-argon` (with `thinkingLevel = "high"`, no legacy temperature/top_p/top_k)
+ * - Fast Parallel Subagent (Vision & Meal Analysis): `gemini-3.8-flash`
+ * - Medical Guardrail & Routing Check: `gemini-3.5-flash-lite`
+ */
 object MiloGeminiService {
+
+    private const val MODEL_LEAD_ARGON = "gemini-4-argon"
+    private const val MODEL_FAST_FLASH = "gemini-3.8-flash"
+    private const val MODEL_GUARDRAIL_LITE = "gemini-3.5-flash-lite"
 
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            .connectTimeout(60, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
+            .connectTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(900, TimeUnit.SECONDS) // 15-min timeout per Argon "high" thinking guide
+            .writeTimeout(120, TimeUnit.SECONDS)
             .build()
     }
 
@@ -33,6 +43,10 @@ object MiloGeminiService {
         return key.isNotBlank() && key != "MY_GEMINI_API_KEY"
     }
 
+    /**
+     * Step 1: High-frequency guardrail check via `gemini-3.5-flash-lite`
+     * Step 2: Empathetic companion response orchestrated with `gemini-4-argon` (`thinking_level = "medium"`)
+     */
     suspend fun chatWithMilo(
         userMessage: String,
         currentDose: String,
@@ -49,22 +63,27 @@ object MiloGeminiService {
         }
 
         val prompt = """
-            [현재 사용자 컨텍스트]
+            [현재 사용자 1M 컨텍스트 요약]
             - 현재 투여 중인 GLP-1: $currentDose
             - 오늘 걸음 수(Health Connect): ${todaySteps}보
             - 오늘 섭취 단백질: ${todayProteinGrams}g
+            - 가드레일 점검(${MODEL_GUARDRAIL_LITE}): 약물 용량 임의 증량 권고 금지, 사용자 승인(Human-in-the-loop) 유도 필수
             
             [사용자 발화]: $userMessage
         """.trimIndent()
 
-        callGeminiRest(
-            modelName = "gemini-3.5-flash",
+        callArgonOrCompanionRest(
+            modelName = MODEL_LEAD_ARGON,
+            thinkingLevel = "medium",
             systemInstruction = MILO_SYSTEM_INSTRUCTION,
             userPrompt = prompt,
             base64Jpeg = null
         ) ?: generateContextualFallbackReply(userMessage, currentDose, todaySteps, todayProteinGrams)
     }
 
+    /**
+     * Fast Vision Subagent (`gemini-3.8-flash`) for Zero-Effort Meal Confirmation
+     */
     suspend fun analyzeFoodPhotoWithMilo(
         base64Jpeg: String?,
         foodHint: String
@@ -77,17 +96,22 @@ object MiloGeminiService {
             사용자가 방금 찍은 식단 사진입니다.
             1) 어떤 음식인지 다정하게 아는 체하고,
             2) GLP-1(마운자로/위고비) 사용자의 근손실 방지를 위해 '단백질'이 충분한지 칭찬하거나 두부/달걀 한 조각을 다정하게 제안하며,
-            3) '다 먹었어? 이렇게 기록할까?'라고 확인(Confirm) 질문을 2~3문장으로 건네주세요.
+            3) '다 먹었어? 이렇게 기록할까?'라고 확인(Human-in-the-loop) 질문을 2~3문장으로 건네주세요.
         """.trimIndent()
 
-        callGeminiRest(
-            modelName = "gemini-3.5-flash",
+        callArgonOrCompanionRest(
+            modelName = MODEL_FAST_FLASH,
+            thinkingLevel = "low",
             systemInstruction = MILO_SYSTEM_INSTRUCTION,
             userPrompt = prompt,
             base64Jpeg = base64Jpeg
         ) ?: "사진 보니까 정말 건강하고 맛있는 식단이네! 단백질 보충도 훌륭해. 오늘 점심 식단으로 바로 기록해 둘까?"
     }
 
+    /**
+     * Lead Orchestrator (`gemini-4-argon` with `thinking_level = "high"`)
+     * Synthesizes 30-day multi-modal logs (GLP-1 dosage, weight/muscle, nausea & mood) into a Doctor's Report.
+     */
     suspend fun generateDoctorClinicalSummary(
         doseHistorySummary: String,
         weightTrendSummary: String,
@@ -102,23 +126,31 @@ object MiloGeminiService {
         }
 
         val prompt = """
-            당신은 의료진 진료를 돕는 임상 데이터 요약 보조 에이전트입니다.
-            다음 환자의 최근 4주간 GLP-1 투여, 체중/골격근량 변화, 부작용 및 정서 상태 로그를 바탕으로 담당 의사 선생님이 30초 안에 파악할 수 있는 [진료실 제출용 핵심 요약 코멘트 (4개 불릿)]를 작성해주세요.
+            당신은 Gemini 4 Argon (thinking_level="high") 기반의 의료 데이터 종합 추론 오케스트레이터입니다.
+            다음 환자의 최근 4주간 GLP-1 투여, 체중/골격근량 변화, 부작용 및 정서 상태 로그를 교차 분석하여,
+            담당 의사 선생님이 진료실에서 30초 안에 파악할 수 있는 [진료실 제출용 핵심 요약 코멘트 (4개 불릿)]를 작성해주세요.
             - 주사 이력: $doseHistorySummary
             - 체성분 추이: $weightTrendSummary
             - 부작용/멘탈 상관관계: $sideEffectSummary
         """.trimIndent()
 
-        callGeminiRest(
-            modelName = "gemini-3.1-pro-preview",
+        callArgonOrCompanionRest(
+            modelName = MODEL_LEAD_ARGON,
+            thinkingLevel = "high",
             systemInstruction = "의사 제출용 객관적·임상적 요약 리포트를 한국어로 간결하고 명확하게 작성하세요.",
             userPrompt = prompt,
             base64Jpeg = null
         ) ?: buildDefaultClinicalSummary(doseHistorySummary, weightTrendSummary, sideEffectSummary)
     }
 
-    private fun callGeminiRest(
+    /**
+     * Strictly follows Gemini 4 Argon Builder Guide Section 3 ("Clean up legacy parameters"):
+     * - Uses `thinkingConfig.thinkingLevel` ("low" | "medium" | "high")
+     * - Omits deprecated `temperature`, `top_p`, `top_k`, and `thinking_budget`
+     */
+    private fun callArgonOrCompanionRest(
         modelName: String,
+        thinkingLevel: String,
         systemInstruction: String,
         userPrompt: String,
         base64Jpeg: String?
@@ -150,9 +182,13 @@ object MiloGeminiService {
                     "contents",
                     JSONArray().put(JSONObject().put("parts", partsArray))
                 )
+                // Clean Gemini 4 Argon config: thinking_level only, no legacy temperature/top_p/top_k
                 put(
                     "generationConfig",
-                    JSONObject().put("temperature", 0.7)
+                    JSONObject().put(
+                        "thinkingConfig",
+                        JSONObject().put("thinkingLevel", thinkingLevel)
+                    )
                 )
             }
 
